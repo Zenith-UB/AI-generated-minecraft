@@ -2,12 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>MiniCraft Mobile</title>
+<title>MiniCraft Fixed</title>
 <style>
-body { margin: 0; overflow: hidden; font-family: sans-serif; }
-canvas { display: block; }
-
-/* UI */
+body { margin: 0; overflow: hidden; touch-action: none; }
 #ui {
   position: absolute;
   top: 10px;
@@ -16,22 +13,17 @@ canvas { display: block; }
   z-index: 10;
 }
 
-/* Mobile Controls */
-#mobileControls {
+/* Mobile controls */
+#joystick {
   position: absolute;
   bottom: 20px;
   left: 20px;
-  display: none;
-}
-
-#joystick {
   width: 100px;
   height: 100px;
   background: rgba(255,255,255,0.2);
   border-radius: 50%;
-  position: relative;
+  display: none;
 }
-
 #stick {
   width: 40px;
   height: 40px;
@@ -42,7 +34,7 @@ canvas { display: block; }
   top: 30px;
 }
 
-#jumpBtn {
+#jump {
   position: absolute;
   bottom: 40px;
   right: 40px;
@@ -59,41 +51,35 @@ canvas { display: block; }
 </head>
 <body>
 
-<div id="ui">MiniCraft | Click or Touch to Start</div>
+<div id="ui">MiniCraft | Tap/Click to start</div>
+<div id="joystick"><div id="stick"></div></div>
+<div id="jump">Jump</div>
 
-<div id="mobileControls">
-  <div id="joystick"><div id="stick"></div></div>
-</div>
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.158/build/three.module.js";
+import { PointerLockControls } from "https://cdn.jsdelivr.net/npm/three@0.158/examples/jsm/controls/PointerLockControls.js";
 
-<div id="jumpBtn">Jump</div>
-
-<script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/controls/PointerLockControls.js"></script>
-
-<script>
 const isMobile = 'ontouchstart' in window;
-if (isMobile) {
-  document.getElementById("mobileControls").style.display = "block";
-}
+if (isMobile) document.getElementById("joystick").style.display = "block";
 
 // Scene
-let scene = new THREE.Scene();
+const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
 
-let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
-let renderer = new THREE.WebGLRenderer();
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // Light
-let light = new THREE.DirectionalLight(0xffffff, 1);
+const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(50,100,50);
 scene.add(light);
 
-// Controls
+// Controls (PC)
 let controls;
 if (!isMobile) {
-  controls = new THREE.PointerLockControls(camera, document.body);
+  controls = new PointerLockControls(camera, document.body);
   document.body.addEventListener("click", () => controls.lock());
 }
 
@@ -107,147 +93,150 @@ document.addEventListener("keydown", e => keys[e.code] = true);
 document.addEventListener("keyup", e => keys[e.code] = false);
 
 // Materials
-const grass = new THREE.MeshLambertMaterial({ color: 0x00aa00 });
-const dirt = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-const stone = new THREE.MeshLambertMaterial({ color: 0x888888 });
-const wood = new THREE.MeshLambertMaterial({ color: 0x8B5A2B });
-const leaves = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+const mat = {
+  grass: new THREE.MeshLambertMaterial({ color: 0x00aa00 }),
+  dirt: new THREE.MeshLambertMaterial({ color: 0x8B4513 }),
+  stone: new THREE.MeshLambertMaterial({ color: 0x888888 }),
+  wood: new THREE.MeshLambertMaterial({ color: 0x8B5A2B }),
+  leaves: new THREE.MeshLambertMaterial({ color: 0x228B22 })
+};
 
 const cube = new THREE.BoxGeometry(1,1,1);
 
-// Height
+// Terrain
 function height(x,z){
   return Math.floor(Math.sin(x*0.2)*2 + Math.cos(z*0.2)*2 + 5);
 }
 
-// Tree generator
-function makeTree(x, y, z) {
-  // trunk
-  for (let i = 0; i < 3; i++) {
-    let t = new THREE.Mesh(cube, wood);
-    t.position.set(x, y + i, z);
+// Tree
+function tree(x,y,z){
+  for(let i=0;i<3;i++){
+    let t = new THREE.Mesh(cube, mat.wood);
+    t.position.set(x,y+i,z);
     scene.add(t);
   }
-
-  // leaves
-  for (let lx = -1; lx <= 1; lx++) {
-    for (let lz = -1; lz <= 1; lz++) {
-      for (let ly = 2; ly <= 3; ly++) {
-        let leaf = new THREE.Mesh(cube, leaves);
-        leaf.position.set(x + lx, y + ly, z + lz);
-        scene.add(leaf);
+  for(let lx=-1;lx<=1;lx++){
+    for(let lz=-1;lz<=1;lz++){
+      for(let ly=2;ly<=3;ly++){
+        let l = new THREE.Mesh(cube, mat.leaves);
+        l.position.set(x+lx,y+ly,z+lz);
+        scene.add(l);
       }
     }
   }
 }
 
 // Generate world
-for (let x = -20; x < 20; x++) {
-  for (let z = -20; z < 20; z++) {
+for(let x=-20;x<20;x++){
+  for(let z=-20;z<20;z++){
     let h = height(x,z);
 
-    for (let y = 0; y < h; y++) {
-      let mat;
-      if (y === h-1) mat = grass;
-      else if (y > h-4) mat = dirt;
-      else mat = stone;
-
-      let block = new THREE.Mesh(cube, mat);
-      block.position.set(x,y,z);
-      scene.add(block);
+    for(let y=0;y<h;y++){
+      let m = y===h-1 ? mat.grass : (y>h-4 ? mat.dirt : mat.stone);
+      let b = new THREE.Mesh(cube,m);
+      b.position.set(x,y,z);
+      scene.add(b);
     }
 
-    // Random trees
-    if (Math.random() < 0.05) {
-      makeTree(x, h, z);
-    }
+    if(Math.random()<0.05) tree(x,h,z);
   }
 }
 
-camera.position.y = 10;
+camera.position.set(0,10,0);
 
-// Mobile joystick
-let joyX = 0, joyY = 0;
-let stick = document.getElementById("stick");
+// Mobile look (swipe)
+let touchX=0, touchY=0;
+if (isMobile) {
+  document.addEventListener("touchmove", e=>{
+    let dx = e.touches[0].movementX || 0;
+    let dy = e.touches[0].movementY || 0;
+
+    camera.rotation.y -= dx * 0.005;
+    camera.rotation.x -= dy * 0.005;
+  });
+}
+
+// Joystick
+let joyX=0, joyY=0;
+const stick = document.getElementById("stick");
 
 if (isMobile) {
-  let joy = document.getElementById("joystick");
+  const joy = document.getElementById("joystick");
 
-  joy.addEventListener("touchmove", e => {
+  joy.addEventListener("touchmove", e=>{
     let t = e.touches[0];
-    let rect = joy.getBoundingClientRect();
-    joyX = (t.clientX - rect.left - 50) / 50;
-    joyY = (t.clientY - rect.top - 50) / 50;
+    let r = joy.getBoundingClientRect();
+    joyX = (t.clientX - r.left - 50)/50;
+    joyY = (t.clientY - r.top - 50)/50;
 
-    stick.style.left = (30 + joyX*20) + "px";
-    stick.style.top = (30 + joyY*20) + "px";
+    stick.style.left = (30+joyX*20)+"px";
+    stick.style.top = (30+joyY*20)+"px";
   });
 
-  joy.addEventListener("touchend", () => {
-    joyX = joyY = 0;
-    stick.style.left = "30px";
-    stick.style.top = "30px";
+  joy.addEventListener("touchend", ()=>{
+    joyX=joyY=0;
+    stick.style.left="30px";
+    stick.style.top="30px";
   });
 
-  document.getElementById("jumpBtn").addEventListener("touchstart", () => {
-    if (canJump) {
-      velocity.y += 8;
-      canJump = false;
+  document.getElementById("jump").addEventListener("touchstart", ()=>{
+    if(canJump){
+      velocity.y=8;
+      canJump=false;
     }
   });
 }
 
 // Loop
 let prev = performance.now();
-
-function animate() {
+function animate(){
   requestAnimationFrame(animate);
 
   let now = performance.now();
-  let delta = (now - prev)/1000;
+  let dt = (now-prev)/1000;
 
-  velocity.x -= velocity.x * 10 * delta;
-  velocity.z -= velocity.z * 10 * delta;
-  velocity.y -= 9.8 * 5 * delta;
+  velocity.x -= velocity.x*10*dt;
+  velocity.z -= velocity.z*10*dt;
+  velocity.y -= 9.8*5*dt;
 
-  if (isMobile) {
-    direction.x = joyX;
-    direction.z = joyY;
+  if(isMobile){
+    direction.set(joyX,0,joyY);
   } else {
-    direction.z = Number(keys["KeyW"]) - Number(keys["KeyS"]);
-    direction.x = Number(keys["KeyD"]) - Number(keys["KeyA"]);
+    direction.set(
+      Number(keys["KeyD"])-Number(keys["KeyA"]),
+      0,
+      Number(keys["KeyS"])-Number(keys["KeyW"])
+    );
   }
 
   direction.normalize();
+  velocity.x -= direction.x*20*dt;
+  velocity.z -= direction.z*20*dt;
 
-  velocity.x -= direction.x * 20 * delta;
-  velocity.z -= direction.z * 20 * delta;
-
-  if (!isMobile) {
-    controls.moveRight(-velocity.x * delta);
-    controls.moveForward(-velocity.z * delta);
+  if(!isMobile){
+    controls.moveRight(-velocity.x*dt);
+    controls.moveForward(-velocity.z*dt);
   } else {
-    camera.position.x += -velocity.x * delta;
-    camera.position.z += -velocity.z * delta;
+    camera.position.x += -velocity.x*dt;
+    camera.position.z += -velocity.z*dt;
   }
 
-  camera.position.y += velocity.y * delta;
+  camera.position.y += velocity.y*dt;
 
-  if (camera.position.y < 6) {
-    velocity.y = 0;
-    camera.position.y = 6;
-    canJump = true;
+  if(camera.position.y < 6){
+    velocity.y=0;
+    camera.position.y=6;
+    canJump=true;
   }
 
-  if (keys["Space"] && canJump) {
-    velocity.y += 8;
-    canJump = false;
+  if(keys["Space"] && canJump){
+    velocity.y=8;
+    canJump=false;
   }
 
-  renderer.render(scene, camera);
-  prev = now;
+  renderer.render(scene,camera);
+  prev=now;
 }
-
 animate();
 </script>
 </body>
