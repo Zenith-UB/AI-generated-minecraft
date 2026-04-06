@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>MiniCraft Improved</title>
+<title>MiniCraft Stable</title>
 <style>
 body { margin:0; overflow:hidden; touch-action:none; }
 
@@ -26,11 +26,27 @@ body { margin:0; overflow:hidden; touch-action:none; }
   left:30px;
   top:30px;
 }
+
+/* jump button */
+#jump {
+  position:absolute;
+  bottom:40px;
+  right:40px;
+  width:70px;
+  height:70px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.3);
+  color:white;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 </style>
 </head>
 <body>
 
 <div id="joy"><div id="stick"></div></div>
+<div id="jump">Jump</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
 
@@ -38,7 +54,7 @@ body { margin:0; overflow:hidden; touch-action:none; }
 const isMobile = 'ontouchstart' in window;
 if(isMobile) document.getElementById("joy").style.display="block";
 
-// Scene
+// Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
 
@@ -63,12 +79,9 @@ const m = {
 
 const cube = new THREE.BoxGeometry(1,1,1);
 
-// Terrain
-function height(x,z){
- return Math.floor(Math.sin(x*0.2)*2 + Math.cos(z*0.2)*2 + 5);
-}
+// Terrain functions
+function height(x,z){ return Math.floor(Math.sin(x*0.2)*2 + Math.cos(z*0.2)*2 + 5); }
 
-// Tree
 function tree(x,y,z){
  for(let i=0;i<3;i++){
   let t=new THREE.Mesh(cube,m.wood);
@@ -86,21 +99,18 @@ function tree(x,y,z){
  }
 }
 
-// World
+// World generation
 let groundMap = {};
-
 for(let x=-20;x<20;x++){
  for(let z=-20;z<20;z++){
   let h=height(x,z);
   groundMap[x+","+z]=h;
-
   for(let y=0;y<h;y++){
    let mat=y===h-1?m.grass:(y>h-4?m.dirt:m.stone);
    let b=new THREE.Mesh(cube,mat);
    b.position.set(x,y,z);
    scene.add(b);
   }
-
   if(Math.random()<0.05) tree(x,h,z);
  }
 }
@@ -112,7 +122,7 @@ let yaw = 0;
 let pitch = 0;
 let canJump = false;
 
-// PC look
+// PC mouse look
 if(!isMobile){
  document.body.addEventListener("click",()=>document.body.requestPointerLock());
  document.addEventListener("mousemove",e=>{
@@ -124,30 +134,25 @@ if(!isMobile){
  });
 }
 
-// Mobile look (RIGHT SIDE ONLY)
+// Mobile look (right half)
 if(isMobile){
- let lastX, lastY;
+ let lastX,lastY;
  document.addEventListener("touchstart",e=>{
-  if(e.touches[0].clientX > innerWidth/2){
-    lastX = e.touches[0].clientX;
-    lastY = e.touches[0].clientY;
+  if(e.touches[0].clientX>innerWidth/2){
+   lastX=e.touches[0].clientX;
+   lastY=e.touches[0].clientY;
   }
  });
-
  document.addEventListener("touchmove",e=>{
-  let t = e.touches[0];
-
-  if(t.clientX > innerWidth/2){
-    let dx = t.clientX - lastX;
-    let dy = t.clientY - lastY;
-
-    yaw -= dx * 0.005;
-    pitch -= dy * 0.005;
-
-    pitch = Math.max(-1.5, Math.min(1.5, pitch));
-
-    lastX = t.clientX;
-    lastY = t.clientY;
+  let t=e.touches[0];
+  if(t.clientX>innerWidth/2){
+   let dx=t.clientX-lastX;
+   let dy=t.clientY-lastY;
+   yaw-=dx*0.005;
+   pitch-=dy*0.005;
+   pitch=Math.max(-1.5,Math.min(1.5,pitch));
+   lastX=t.clientX;
+   lastY=t.clientY;
   }
  });
 }
@@ -157,107 +162,71 @@ let keys={};
 document.addEventListener("keydown",e=>keys[e.code]=true);
 document.addEventListener("keyup",e=>keys[e.code]=false);
 
-// Joystick (clamped)
+// Mobile joystick
 let joyX=0, joyY=0;
 const stick=document.getElementById("stick");
-
 if(isMobile){
  const joy=document.getElementById("joy");
-
  joy.addEventListener("touchmove",e=>{
   let t=e.touches[0];
   let r=joy.getBoundingClientRect();
-
-  let dx = t.clientX - (r.left+50);
-  let dy = t.clientY - (r.top+50);
-
-  let dist = Math.sqrt(dx*dx + dy*dy);
-  let max = 40;
-
-  if(dist > max){
-    dx = dx/dist * max;
-    dy = dy/dist * max;
-  }
-
-  joyX = dx/max;
-  joyY = dy/max;
-
-  stick.style.left = (30 + dx) + "px";
-  stick.style.top = (30 + dy) + "px";
+  let dx=t.clientX-(r.left+50);
+  let dy=t.clientY-(r.top+50);
+  let dist=Math.sqrt(dx*dx+dy*dy);
+  let max=40;
+  if(dist>max){ dx=dx/dist*max; dy=dy/dist*max; }
+  joyX=dx/max; joyY=dy/max;
+  stick.style.left=(30+dx)+"px";
+  stick.style.top=(30+dy)+"px";
+ });
+ joy.addEventListener("touchend",()=>{
+  joyX=0; joyY=0;
+  stick.style.left="30px"; stick.style.top="30px";
  });
 
- joy.addEventListener("touchend",()=>{
-  joyX=joyY=0;
-  stick.style.left="30px";
-  stick.style.top="30px";
+ // Mobile jump button
+ document.getElementById("jump").addEventListener("touchstart", ()=>{
+   if(canJump){ vel.y=8; canJump=false; }
  });
 }
 
-// Loop
+// Animation loop
 let prev=performance.now();
-
 function animate(){
  requestAnimationFrame(animate);
-
  let now=performance.now();
  let dt=(now-prev)/1000;
 
- // gravity
- vel.y -= 20*dt;
+ // Gravity
+ vel.y-=20*dt;
 
- // input
- let inputX=0, inputZ=0;
+ // Input
+ let inputX=0,inputZ=0;
+ if(isMobile){ inputX=joyX; inputZ=joyY; }
+ else{ inputX=(keys["KeyD"]?1:0)-(keys["KeyA"]?1:0); inputZ=(keys["KeyW"]?1:0)-(keys["KeyS"]?1:0); }
 
- if(isMobile){
-  inputX = joyX;
-  inputZ = joyY;
- } else {
-  inputX = (keys["KeyD"]?1:0)-(keys["KeyA"]?1:0);
-  inputZ = (keys["KeyS"]?1:0)-(keys["KeyW"]?1:0);
- }
-
- // FIXED movement (camera-relative)
- let forward = new THREE.Vector3(
-   -Math.sin(yaw),
-   0,
-   -Math.cos(yaw)
- );
- let right = new THREE.Vector3(
-   Math.cos(yaw),
-   0,
-   -Math.sin(yaw)
- );
-
- let speed = 6;
+ // Camera-relative movement
+ let forward = new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
+ let right   = new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
 
  let move = new THREE.Vector3();
- move.addScaledVector(forward, inputZ);
- move.addScaledVector(right, inputX);
+ move.addScaledVector(forward,inputZ);
+ move.addScaledVector(right,inputX);
 
- pos.x += move.x * speed * dt;
- pos.z += move.z * speed * dt;
-
- // vertical
+ let speed=6;
+ pos.x += move.x*speed*dt;
+ pos.z += move.z*speed*dt;
  pos.y += vel.y*dt;
 
- // collision (no stepping)
- let gx=Math.floor(pos.x);
- let gz=Math.floor(pos.z);
- let ground=groundMap[gx+","+gz] || 0;
+ // Collision
+ let gx=Math.floor(pos.x),gz=Math.floor(pos.z);
+ let ground=groundMap[gx+","+gz]||0;
+ if(pos.y<ground+2){ pos.y=ground+2; vel.y=0; canJump=true; }
 
- if(pos.y < ground+2){
-  pos.y = ground+2;
-  vel.y = 0;
-  canJump = true;
- }
+ // PC jump
+ if(keys["Space"] && canJump){ vel.y=8; canJump=false; }
 
- // jump (PC only)
- if(keys["Space"] && canJump){
-  vel.y = 8;
-  canJump = false;
- }
-
- // apply camera
+ // Camera apply
  camera.position.copy(pos);
  camera.rotation.order="YXZ";
  camera.rotation.y=yaw;
