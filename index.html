@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>MiniCraft Stable</title>
+<title>MiniCraft Improved</title>
 <style>
 body { margin:0; overflow:hidden; touch-action:none; }
 
@@ -26,27 +26,11 @@ body { margin:0; overflow:hidden; touch-action:none; }
   left:30px;
   top:30px;
 }
-
-/* jump */
-#jump {
-  position:absolute;
-  bottom:40px;
-  right:40px;
-  width:70px;
-  height:70px;
-  border-radius:50%;
-  background:rgba(255,255,255,0.3);
-  color:white;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
 </style>
 </head>
 <body>
 
 <div id="joy"><div id="stick"></div></div>
-<div id="jump">Jump</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
 
@@ -79,7 +63,7 @@ const m = {
 
 const cube = new THREE.BoxGeometry(1,1,1);
 
-// Height map
+// Terrain
 function height(x,z){
  return Math.floor(Math.sin(x*0.2)*2 + Math.cos(z*0.2)*2 + 5);
 }
@@ -128,34 +112,43 @@ let yaw = 0;
 let pitch = 0;
 let canJump = false;
 
-// PC mouse look
+// PC look
 if(!isMobile){
  document.body.addEventListener("click",()=>document.body.requestPointerLock());
  document.addEventListener("mousemove",e=>{
   if(document.pointerLockElement===document.body){
    yaw -= e.movementX*0.002;
    pitch -= e.movementY*0.002;
-   pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+   pitch = Math.max(-1.5, Math.min(1.5, pitch));
   }
  });
 }
 
-// Mobile look
+// Mobile look (RIGHT SIDE ONLY)
 if(isMobile){
- let lastX,lastY;
+ let lastX, lastY;
  document.addEventListener("touchstart",e=>{
-  lastX=e.touches[0].clientX;
-  lastY=e.touches[0].clientY;
+  if(e.touches[0].clientX > innerWidth/2){
+    lastX = e.touches[0].clientX;
+    lastY = e.touches[0].clientY;
+  }
  });
- document.addEventListener("touchmove",e=>{
-  let dx=e.touches[0].clientX-lastX;
-  let dy=e.touches[0].clientY-lastY;
-  lastX=e.touches[0].clientX;
-  lastY=e.touches[0].clientY;
 
-  yaw -= dx*0.005;
-  pitch -= dy*0.005;
-  pitch=Math.max(-1.5,Math.min(1.5,pitch));
+ document.addEventListener("touchmove",e=>{
+  let t = e.touches[0];
+
+  if(t.clientX > innerWidth/2){
+    let dx = t.clientX - lastX;
+    let dy = t.clientY - lastY;
+
+    yaw -= dx * 0.005;
+    pitch -= dy * 0.005;
+
+    pitch = Math.max(-1.5, Math.min(1.5, pitch));
+
+    lastX = t.clientX;
+    lastY = t.clientY;
+  }
  });
 }
 
@@ -164,34 +157,41 @@ let keys={};
 document.addEventListener("keydown",e=>keys[e.code]=true);
 document.addEventListener("keyup",e=>keys[e.code]=false);
 
-// Joystick
+// Joystick (clamped)
 let joyX=0, joyY=0;
 const stick=document.getElementById("stick");
 
 if(isMobile){
  const joy=document.getElementById("joy");
+
  joy.addEventListener("touchmove",e=>{
   let t=e.touches[0];
   let r=joy.getBoundingClientRect();
-  joyX=(t.clientX-r.left-50)/50;
-  joyY=(t.clientY-r.top-50)/50;
-  stick.style.left=(30+joyX*20)+"px";
-  stick.style.top=(30+joyY*20)+"px";
+
+  let dx = t.clientX - (r.left+50);
+  let dy = t.clientY - (r.top+50);
+
+  let dist = Math.sqrt(dx*dx + dy*dy);
+  let max = 40;
+
+  if(dist > max){
+    dx = dx/dist * max;
+    dy = dy/dist * max;
+  }
+
+  joyX = dx/max;
+  joyY = dy/max;
+
+  stick.style.left = (30 + dx) + "px";
+  stick.style.top = (30 + dy) + "px";
  });
+
  joy.addEventListener("touchend",()=>{
   joyX=joyY=0;
   stick.style.left="30px";
   stick.style.top="30px";
  });
 }
-
-// Jump
-document.getElementById("jump").addEventListener(isMobile?"touchstart":"click",()=>{
- if(canJump){
-  vel.y=8;
-  canJump=false;
- }
-});
 
 // Loop
 let prev=performance.now();
@@ -205,35 +205,56 @@ function animate(){
  // gravity
  vel.y -= 20*dt;
 
- // movement
- let moveX=0, moveZ=0;
+ // input
+ let inputX=0, inputZ=0;
 
  if(isMobile){
-  moveX=joyX;
-  moveZ=joyY;
+  inputX = joyX;
+  inputZ = joyY;
  } else {
-  moveX=(keys["KeyD"]?1:0)-(keys["KeyA"]?1:0);
-  moveZ=(keys["KeyS"]?1:0)-(keys["KeyW"]?1:0);
+  inputX = (keys["KeyD"]?1:0)-(keys["KeyA"]?1:0);
+  inputZ = (keys["KeyS"]?1:0)-(keys["KeyW"]?1:0);
  }
 
- let speed=10;
- let sin=Math.sin(yaw);
- let cos=Math.cos(yaw);
+ // FIXED movement (camera-relative)
+ let forward = new THREE.Vector3(
+   -Math.sin(yaw),
+   0,
+   -Math.cos(yaw)
+ );
+ let right = new THREE.Vector3(
+   Math.cos(yaw),
+   0,
+   -Math.sin(yaw)
+ );
 
- pos.x += (moveX*cos - moveZ*sin)*speed*dt;
- pos.z += (moveZ*cos + moveX*sin)*speed*dt;
+ let speed = 6;
 
+ let move = new THREE.Vector3();
+ move.addScaledVector(forward, inputZ);
+ move.addScaledVector(right, inputX);
+
+ pos.x += move.x * speed * dt;
+ pos.z += move.z * speed * dt;
+
+ // vertical
  pos.y += vel.y*dt;
 
- // ground collision
+ // collision (no stepping)
  let gx=Math.floor(pos.x);
  let gz=Math.floor(pos.z);
- let ground = groundMap[gx+","+gz] || 0;
+ let ground=groundMap[gx+","+gz] || 0;
 
  if(pos.y < ground+2){
   pos.y = ground+2;
   vel.y = 0;
   canJump = true;
+ }
+
+ // jump (PC only)
+ if(keys["Space"] && canJump){
+  vel.y = 8;
+  canJump = false;
  }
 
  // apply camera
@@ -245,7 +266,6 @@ function animate(){
  renderer.render(scene,camera);
  prev=now;
 }
-
 animate();
 </script>
 </body>
