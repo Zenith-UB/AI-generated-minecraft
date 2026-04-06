@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MiniCraft Mobile</title>
+<style>
+body { margin: 0; overflow: hidden; font-family: sans-serif; }
+canvas { display: block; }
+
+/* UI */
+#ui {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+  z-index: 10;
+}
+
+/* Mobile Controls */
+#mobileControls {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  display: none;
+}
+
+#joystick {
+  width: 100px;
+  height: 100px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  position: relative;
+}
+
+#stick {
+  width: 40px;
+  height: 40px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  left: 30px;
+  top: 30px;
+}
+
+#jumpBtn {
+  position: absolute;
+  bottom: 40px;
+  right: 40px;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.3);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+</style>
+</head>
+<body>
+
+<div id="ui">MiniCraft | Click or Touch to Start</div>
+
+<div id="mobileControls">
+  <div id="joystick"><div id="stick"></div></div>
+</div>
+
+<div id="jumpBtn">Jump</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158/examples/js/controls/PointerLockControls.js"></script>
+
+<script>
+const isMobile = 'ontouchstart' in window;
+if (isMobile) {
+  document.getElementById("mobileControls").style.display = "block";
+}
+
+// Scene
+let scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+
+let camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer();
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Light
+let light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(50,100,50);
+scene.add(light);
+
+// Controls
+let controls;
+if (!isMobile) {
+  controls = new THREE.PointerLockControls(camera, document.body);
+  document.body.addEventListener("click", () => controls.lock());
+}
+
+// Movement
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let canJump = false;
+let keys = {};
+
+document.addEventListener("keydown", e => keys[e.code] = true);
+document.addEventListener("keyup", e => keys[e.code] = false);
+
+// Materials
+const grass = new THREE.MeshLambertMaterial({ color: 0x00aa00 });
+const dirt = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+const stone = new THREE.MeshLambertMaterial({ color: 0x888888 });
+const wood = new THREE.MeshLambertMaterial({ color: 0x8B5A2B });
+const leaves = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+
+const cube = new THREE.BoxGeometry(1,1,1);
+
+// Height
+function height(x,z){
+  return Math.floor(Math.sin(x*0.2)*2 + Math.cos(z*0.2)*2 + 5);
+}
+
+// Tree generator
+function makeTree(x, y, z) {
+  // trunk
+  for (let i = 0; i < 3; i++) {
+    let t = new THREE.Mesh(cube, wood);
+    t.position.set(x, y + i, z);
+    scene.add(t);
+  }
+
+  // leaves
+  for (let lx = -1; lx <= 1; lx++) {
+    for (let lz = -1; lz <= 1; lz++) {
+      for (let ly = 2; ly <= 3; ly++) {
+        let leaf = new THREE.Mesh(cube, leaves);
+        leaf.position.set(x + lx, y + ly, z + lz);
+        scene.add(leaf);
+      }
+    }
+  }
+}
+
+// Generate world
+for (let x = -20; x < 20; x++) {
+  for (let z = -20; z < 20; z++) {
+    let h = height(x,z);
+
+    for (let y = 0; y < h; y++) {
+      let mat;
+      if (y === h-1) mat = grass;
+      else if (y > h-4) mat = dirt;
+      else mat = stone;
+
+      let block = new THREE.Mesh(cube, mat);
+      block.position.set(x,y,z);
+      scene.add(block);
+    }
+
+    // Random trees
+    if (Math.random() < 0.05) {
+      makeTree(x, h, z);
+    }
+  }
+}
+
+camera.position.y = 10;
+
+// Mobile joystick
+let joyX = 0, joyY = 0;
+let stick = document.getElementById("stick");
+
+if (isMobile) {
+  let joy = document.getElementById("joystick");
+
+  joy.addEventListener("touchmove", e => {
+    let t = e.touches[0];
+    let rect = joy.getBoundingClientRect();
+    joyX = (t.clientX - rect.left - 50) / 50;
+    joyY = (t.clientY - rect.top - 50) / 50;
+
+    stick.style.left = (30 + joyX*20) + "px";
+    stick.style.top = (30 + joyY*20) + "px";
+  });
+
+  joy.addEventListener("touchend", () => {
+    joyX = joyY = 0;
+    stick.style.left = "30px";
+    stick.style.top = "30px";
+  });
+
+  document.getElementById("jumpBtn").addEventListener("touchstart", () => {
+    if (canJump) {
+      velocity.y += 8;
+      canJump = false;
+    }
+  });
+}
+
+// Loop
+let prev = performance.now();
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  let now = performance.now();
+  let delta = (now - prev)/1000;
+
+  velocity.x -= velocity.x * 10 * delta;
+  velocity.z -= velocity.z * 10 * delta;
+  velocity.y -= 9.8 * 5 * delta;
+
+  if (isMobile) {
+    direction.x = joyX;
+    direction.z = joyY;
+  } else {
+    direction.z = Number(keys["KeyW"]) - Number(keys["KeyS"]);
+    direction.x = Number(keys["KeyD"]) - Number(keys["KeyA"]);
+  }
+
+  direction.normalize();
+
+  velocity.x -= direction.x * 20 * delta;
+  velocity.z -= direction.z * 20 * delta;
+
+  if (!isMobile) {
+    controls.moveRight(-velocity.x * delta);
+    controls.moveForward(-velocity.z * delta);
+  } else {
+    camera.position.x += -velocity.x * delta;
+    camera.position.z += -velocity.z * delta;
+  }
+
+  camera.position.y += velocity.y * delta;
+
+  if (camera.position.y < 6) {
+    velocity.y = 0;
+    camera.position.y = 6;
+    canJump = true;
+  }
+
+  if (keys["Space"] && canJump) {
+    velocity.y += 8;
+    canJump = false;
+  }
+
+  renderer.render(scene, camera);
+  prev = now;
+}
+
+animate();
+</script>
+</body>
+</html>
